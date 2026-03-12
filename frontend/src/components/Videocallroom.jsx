@@ -334,7 +334,7 @@ export function VideoCallRoom({ appt, role = 'patient', onClose }) {
       if (remoteMainRef.current) remoteMainRef.current.srcObject = remoteStream;
       if (remotePipRef.current)  remotePipRef.current.srcObject  = remoteStream;
     }
-  }, [remoteStream, pinned]);
+  }, [remoteStream, pinned, peerJoined]);
 
   // Re-sync local stream when pinned swaps (new local video element mounts)
   useEffect(() => {
@@ -502,6 +502,9 @@ export function VideoCallRoom({ appt, role = 'patient', onClose }) {
 
     socket.on('offer', async ({ offer }) => {
       setStatus('connecting');
+      // The person who receives the offer is the SECOND to join —
+      // they never got 'peer-joined', so set peerJoined here
+      setPeerJoined(true);
       await pc.setRemoteDescription(new RTCSessionDescription(offer));
       const answer = await pc.createAnswer();
       await pc.setLocalDescription(answer);
@@ -509,6 +512,7 @@ export function VideoCallRoom({ appt, role = 'patient', onClose }) {
     });
 
     socket.on('answer', async ({ answer }) => {
+      setPeerJoined(true); // first person confirms second has joined
       await pc.setRemoteDescription(new RTCSessionDescription(answer));
     });
 
