@@ -1,0 +1,71 @@
+import { 
+  LayoutGrid, 
+  CalendarCheck, 
+  FileText, 
+  User, 
+  HelpCircle, 
+  LogOut 
+} from 'lucide-react';
+
+import { NavLink, useLocation, useNavigate } from 'react-router-dom';
+
+export function Sidebar({ onLogout }) {
+  const location = useLocation();
+  const navigate = useNavigate();
+
+  const handleLogout = () => {
+    onLogout();
+    navigate("/login"); 
+  };
+
+  const menuItems = [
+    { path: '/patient', label: 'Dashboard', icon: LayoutGrid },
+    { path: '/patient/appointments', label: 'My Appointments', icon: CalendarCheck },
+    { path: '/patient/prescriptions', label: 'Prescriptions', icon: FileText },
+    { path: '/patient/profile', label: 'Profile', icon: User },
+    { path: '/patient/help', label: 'Help', icon: HelpCircle },
+  ];
+
+  return (
+    <div className="w-[230px] bg-white border-r border-gray-200 h-screen sticky top-0 flex flex-col shadow-sm">
+      
+      <div className="p-6 border-b">
+        <h1 className="text-blue-700 text-2xl font-bold">
+          Patient Panel
+        </h1>
+      </div>
+
+      <nav className="flex flex-col px-3 flex-1 mt-4">
+        {menuItems.map((item) => {
+          const Icon = item.icon;
+          const isActive = location.pathname === item.path;
+
+          return (
+            <NavLink
+              key={item.path}
+              to={item.path}
+              className={`w-full flex items-center gap-2 px-3 py-3 rounded-xl mb-2 transition-all duration-200
+                ${isActive 
+                  ? "bg-blue-700 text-white shadow-md" 
+                  : "text-gray-600 hover:bg-blue-50 hover:text-blue-700"
+                }`}
+            >
+              <Icon className="w-4 h-4" />
+              <span className="text-sm font-medium">{item.label}</span>
+            </NavLink>
+          );
+        })}
+      </nav>
+
+      <div className="p-4 border-t">
+        <button
+          onClick={handleLogout}
+          className="w-full flex items-center gap-2 px-3 py-3 rounded-xl text-gray-600 hover:bg-red-50 hover:text-red-600 transition-all"
+        >
+          <LogOut className="w-4 h-4" />
+          <span className="text-sm font-medium">Logout</span>
+        </button>
+      </div>
+    </div>
+  );
+}

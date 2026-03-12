@@ -1,0 +1,18 @@
+# ignore backend folder
+/backend
+
+# ignore frontend dependencies
+/frontend/node_modules
+
+# build files
+/frontend/build
+
+# env files
+.env
+.env.local
+
+# misc
+.DS_Store
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
