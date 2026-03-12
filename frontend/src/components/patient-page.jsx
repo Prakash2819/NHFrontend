@@ -346,7 +346,7 @@ export function PatientDashboard() {
                       </div>
                       <div className="flex items-center gap-2 shrink-0">
                         <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${appt.type === 'video' ? 'bg-blue-100 text-blue-700' : 'bg-green-100 text-green-700'}`}>
-                          {appt.type === 'video' ? '📹 Video' : '🏥 In-person'}
+                          {appt.type === 'video' ? 'Video' : 'In-person'}
                         </span>
                         {/* Status badge */}
                         <span className={`text-xs font-bold px-2 py-1 rounded-full capitalize ${
@@ -365,7 +365,7 @@ export function PatientDashboard() {
                                 ${cs.canJoin ? 'bg-blue-600 text-white hover:bg-blue-700' : 'bg-gray-200 text-gray-500 cursor-not-allowed'}`}
                               title={cs.canJoin ? 'Join video call' : cs.reason}
                             >
-                              {cs.canJoin ? '📹 Join' : cs.isTooEarly ? '⏳ Soon' : 'Join'}
+                              {cs.canJoin ? 'Join' : cs.isTooEarly ? 'Soon' : 'Join'}
                             </button>
                           );
                         })()}
