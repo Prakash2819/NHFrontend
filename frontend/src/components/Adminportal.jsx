@@ -72,13 +72,31 @@ function ConfirmModal({ title, message, confirmLabel, danger, onConfirm, onClose
 
 // ─── Doctor Detail Modal ──────────────────────────────────────────────────────
 function DoctorDetailModal({ doctor, onClose }) {
+  const regNo = doctor.registrationNo?.trim();
+  const hasReg = regNo && regNo !== '—';
+
+  const infoRows = [
+    ['Email',       doctor.email],
+    ['Phone',       doctor.phone       || '—'],
+    ['Experience',  doctor.experience  || '—'],
+    ['Hospital',    doctor.hospital    || '—'],
+    ['Department',  doctor.department  || '—'],
+    ['Degree',      doctor.degree      || '—'],
+    ['Clinic',      doctor.clinic?.name|| '—'],
+    ['Consult Fee', doctor.clinic?.fee      ? `₹${doctor.clinic.fee}`      : '—'],
+    ['Video Fee',   doctor.clinic?.videoFee ? `₹${doctor.clinic.videoFee}` : '—'],
+    ['Status',      doctor.status],
+  ];
+
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={onClose}>
-      <div className="bg-white rounded-2xl w-full max-w-lg shadow-2xl overflow-hidden" onClick={e=>e.stopPropagation()}>
-        <div className="bg-gradient-to-r from-blue-600 to-blue-700 px-6 py-5 flex items-center justify-between">
+      <div className="bg-white rounded-2xl w-full max-w-lg shadow-2xl overflow-hidden max-h-[90vh] flex flex-col" onClick={e=>e.stopPropagation()}>
+
+        {/* Header */}
+        <div className="bg-gradient-to-r from-blue-600 to-blue-700 px-6 py-5 flex items-center justify-between shrink-0">
           <div className="flex items-center gap-4">
             {doctor.photo
-              ? <img src={doctor.photo} className="w-14 h-14 rounded-full object-cover border-2 border-white/30"/>
+              ? <img src={doctor.photo} alt="" className="w-14 h-14 rounded-full object-cover border-2 border-white/30"/>
               : <div className={`w-14 h-14 rounded-full ${avatarBg(doctor.name)} flex items-center justify-center text-white font-bold text-xl border-2 border-white/30`}>{initials(doctor.name)}</div>
             }
             <div>
@@ -88,10 +106,44 @@ function DoctorDetailModal({ doctor, onClose }) {
           </div>
           <button onClick={onClose} className="text-white/70 hover:text-white"><X className="w-5 h-5"/></button>
         </div>
-        <div className="p-6 grid grid-cols-2 gap-4 text-sm">
-          {[['Email',doctor.email],['Phone',doctor.phone||'—'],['Experience',doctor.experience||'—'],['Hospital',doctor.hospital||'—'],['Clinic',doctor.clinic?.name||'—'],['Consult Fee',doctor.clinic?.fee?`₹${doctor.clinic.fee}`:'—'],['Video Fee',doctor.clinic?.videoFee?`₹${doctor.clinic.videoFee}`:'—'],['Degree',doctor.degree||'—'],['Reg No',doctor.registrationNo||'—'],['Status',doctor.status]].map(([label,val])=>(
-            <div key={label}><p className="text-xs font-bold text-gray-400 uppercase tracking-wide mb-0.5">{label}</p><p className="font-semibold text-gray-800 capitalize">{val}</p></div>
-          ))}
+
+        <div className="overflow-y-auto">
+          {/* ── Registration Number — prominent verification card ── */}
+          <div className={`mx-6 mt-5 mb-4 rounded-xl p-4 border-2 flex items-center gap-4 ${hasReg ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'}`}>
+            <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${hasReg ? 'bg-green-600' : 'bg-red-400'}`}>
+              {hasReg
+                ? <CheckCircle className="w-5 h-5 text-white"/>
+                : <AlertTriangle className="w-5 h-5 text-white"/>
+              }
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-xs font-bold uppercase tracking-wide mb-0.5 flex items-center gap-1.5">
+                <span className={hasReg ? 'text-green-700' : 'text-red-600'}>Medical Registration Number</span>
+                <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${hasReg ? 'bg-green-200 text-green-800' : 'bg-red-200 text-red-700'}`}>
+                  {hasReg ? 'PROVIDED' : 'MISSING'}
+                </span>
+              </p>
+              <p className={`text-lg font-bold font-mono tracking-widest ${hasReg ? 'text-green-900' : 'text-red-500 italic text-sm'}`}>
+                {hasReg ? regNo : 'Not provided at signup'}
+              </p>
+              {hasReg && (
+                <p className="text-xs text-green-600 mt-0.5">Verify this number against the medical council registry before approving</p>
+              )}
+              {!hasReg && (
+                <p className="text-xs text-red-500 mt-0.5">Doctor did not submit a registration number — verify manually before approving</p>
+              )}
+            </div>
+          </div>
+
+          {/* Other info grid */}
+          <div className="px-6 pb-6 grid grid-cols-2 gap-3 text-sm">
+            {infoRows.map(([label, val]) => (
+              <div key={label} className="bg-gray-50 rounded-xl px-3 py-2.5">
+                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wide mb-0.5">{label}</p>
+                <p className="font-semibold text-gray-800 capitalize truncate">{val}</p>
+              </div>
+            ))}
+          </div>
         </div>
       </div>
     </div>
@@ -281,6 +333,10 @@ function AdminDashboard({ onLogout }) {
   const deleteDoctor  = async id => { try { await api.delete(`/doctors/${id}`);  setDoctors(prev=>prev.filter(d=>d._id!==id));  fetchStats(); showToast('Doctor removed'); }  catch { showToast('Failed','error'); } };
   const deletePatient = async id => { try { await api.delete(`/patients/${id}`); setPatients(prev=>prev.filter(p=>p._id!==id)); fetchStats(); showToast('Patient removed'); } catch { showToast('Failed','error'); } };
   const deleteAppt    = async id => { try { await api.delete(`/appointments/${id}`); setAppts(prev=>prev.filter(a=>a._id!==id)); fetchStats(); showToast('Appointment removed'); } catch { showToast('Failed','error'); } };
+  const verifyRegNo   = async (id, verified) => {
+    try { const res=await api.put(`/doctors/${id}/status`,{status: verified ? 'approved' : 'pending', regVerified: verified}); setDoctors(prev=>prev.map(d=>d._id===id?{...d,regVerified:verified}:d)); showToast(verified ? 'Registration verified ✓' : 'Verification removed'); }
+    catch { showToast('Failed to update verification','error'); }
+  };
   const saveSchedule  = async (doctorId, schedule) => {
     try { const res=await api.put(`/doctors/${doctorId}/schedule`,{schedule,slotDuration:30}); setDoctors(prev=>prev.map(d=>d._id===doctorId?res.data:d)); showToast('Schedule updated'); }
     catch { showToast('Failed to save schedule','error'); }
@@ -378,7 +434,7 @@ function AdminDashboard({ onLogout }) {
                         <td className="px-5 py-4">
                           <div className="flex items-center gap-3 cursor-pointer" onClick={()=>setModal({type:'doctorDetail',doctor:doc})}>
                             {doc.photo?<img src={doc.photo} className="w-10 h-10 rounded-full object-cover border border-gray-100"/>:<div className={`w-10 h-10 rounded-full ${avatarBg(doc.name)} flex items-center justify-center text-white font-bold text-sm shrink-0`}>{initials(doc.name)}</div>}
-                            <div><p className="font-semibold text-gray-900 text-sm hover:text-blue-600">{doc.name}</p><p className="text-xs text-gray-400">{doc.email}</p></div>
+                            <div><div className="flex items-center gap-1.5"><p className="font-semibold text-gray-900 text-sm hover:text-blue-600">{doc.name}</p>{doc.regVerified&&<span title="Registration Verified"><CheckCircle className="w-3.5 h-3.5 text-green-500 shrink-0"/></span>}</div><p className="text-xs text-gray-400">{doc.email}</p></div>
                           </div>
                         </td>
                         <td className="px-5 py-4 text-sm text-gray-600">{doc.specialization}</td>
@@ -515,7 +571,7 @@ function AdminDashboard({ onLogout }) {
 
       {modal?.type==='confirm'&&<ConfirmModal {...modal} onClose={()=>setModal(null)}/>}
       {modal?.type==='schedule'&&<ScheduleModal doctor={modal.doctor} onSave={saveSchedule} onClose={()=>setModal(null)}/>}
-      {modal?.type==='doctorDetail'&&<DoctorDetailModal doctor={modal.doctor} onClose={()=>setModal(null)}/>}
+      {modal?.type==='doctorDetail'&&<DoctorDetailModal doctor={modal.doctor} onVerify={verifyRegNo} onClose={()=>setModal(null)}/>}
       {toast&&<Toast message={toast.msg} type={toast.type} onClose={()=>setToast(null)}/>}
     </div>
   );

@@ -6,9 +6,6 @@ import { auth } from "../firebase";
 import { RecaptchaVerifier, signInWithPhoneNumber } from "firebase/auth";
 import { X, User, Mail, Calendar, ChevronRight, CheckCircle } from 'lucide-react';
 
-
-let url = 'https://nhbackend.onrender.com'
-
 // ─── Onboarding Popup ─────────────────────────────────────────────────────────
 function OnboardingPopup({ patientId, onComplete }) {
   const [step, setStep]   = useState(1); // 1 = name/email, 2 = dob/gender
@@ -37,7 +34,7 @@ function OnboardingPopup({ patientId, onComplete }) {
     setSaving(true);
     try {
       const res = await axios.post(
-        `${url}/api/patient/onboard/${patientId}`,
+        `https://nhbackend.onrender.com/api/patient/onboard/${patientId}`,
         form
       );
       // Save name to localStorage for display
@@ -214,7 +211,7 @@ export function LoginPage({ onLogin, onSignup }) {
     const isPasswordValid = Object.values(passwordRules).every(Boolean);
 
     const [doctorData, setDoctorData] = useState({
-        name: "", email: "", password: "", specialization: ""
+        name: "", email: "", password: "", specialization: "", registrationNo: ""
     });
     const [doctorError, setDoctorError] = useState("");
 
@@ -234,13 +231,16 @@ export function LoginPage({ onLogin, onSignup }) {
     };
 
     const handleDoctorSignup = async () => {
-        const { name, email, password, specialization } = doctorData;
-        if (!name || !email || !password || !specialization) { setDoctorError("All fields are required"); return; }
+        const { name, email, password, specialization, registrationNo } = doctorData;
+        if (!name || !email || !password || !specialization || !registrationNo) { setDoctorError("All fields are required"); return; }
         const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
         if (!emailRegex.test(email)) { setDoctorError("Please enter a valid email address"); return; }
+        // Reg no: 5-20 alphanumeric chars (letters, digits, hyphens allowed)
+        const regNoRegex = /^[A-Za-z0-9\-]{5,20}$/;
+        if (!regNoRegex.test(registrationNo.trim())) { setDoctorError("Registration No must be 5-20 alphanumeric characters"); return; }
         if (!isPasswordValid) { setDoctorError("Password does not meet all requirements"); return; }
         try {
-            await axios.post(`${url}/api/doctor-signup`, doctorData);
+            await axios.post("https://nhbackend.onrender.com/api/doctor-signup", doctorData);
             alert("Signup successful. Waiting for admin approval.");
             setDoctorAuthMode("login");
         } catch (error) {
@@ -254,7 +254,7 @@ export function LoginPage({ onLogin, onSignup }) {
         const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
         if (!emailRegex.test(email)) { setDoctorError("Please enter a valid email address"); return; }
         try {
-            const res = await axios.post(`${url}/api/doctor-login`, { email, password });
+            const res = await axios.post("https://nhbackend.onrender.com/api/doctor-login", { email, password });
             const doctor = res.data.doctor;
             localStorage.setItem("role",       doctor.role);
             localStorage.setItem("userId",     doctor._id);
@@ -305,7 +305,7 @@ export function LoginPage({ onLogin, onSignup }) {
             const userCredential = await confirmationResult.confirm(otp);
             const verifiedPhone  = userCredential.user.phoneNumber;
 
-            const res  = await axios.post(`${url}/api/mobile-login`, { phone: verifiedPhone });
+            const res  = await axios.post("https://nhbackend.onrender.com/api/mobile-login", { phone: verifiedPhone });
             const user = res.data.user;
 
             localStorage.setItem("role",      user.role);
@@ -461,6 +461,12 @@ export function LoginPage({ onLogin, onSignup }) {
                                         <input type="text" name="specialization" value={doctorData.specialization}
                                             onChange={handleDoctorChange} placeholder="Specialization"
                                             className="w-full py-3 px-4 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" />
+                                        <div>
+                                            <input type="text" name="registrationNo" value={doctorData.registrationNo}
+                                                onChange={handleDoctorChange} placeholder="Medical Registration Number"
+                                                className="w-full py-3 px-4 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" />
+                                            <p className="text-xs text-gray-400 mt-1 ml-1">e.g. KMC-12345 or MCI-98765 (used for verification)</p>
+                                        </div>
                                         <p className="text-red-500 text-sm">{doctorError}</p>
                                         <button type="button" onClick={handleDoctorSignup}
                                             className="w-full py-3 bg-blue-700 text-white rounded-lg hover:bg-blue-800 transition-colors font-medium">
