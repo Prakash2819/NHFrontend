@@ -10,8 +10,7 @@ import { BookingModal } from './BookingModal';
 import { VideoCallRoom, getCallStatus } from './Videocallroom';
 
 // ─── Axios ────────────────────────────────────────────────────────────────────
-const BASE_URL = 'https://nhbackend.onrender.com';
-const api = axios.create({ baseURL: `${BASE_URL}/api` });
+const api = axios.create({ baseURL: 'https://nhbackend.onrender.com/api' });
 const getPatientId = () => localStorage.getItem('patientId');
 
 const TABS         = ['all', 'pending', 'confirmed', 'completed', 'missed', 'cancelled'];
@@ -240,7 +239,7 @@ function MissedBanner({ appt, onReschedule, onRebook }) {
 }
 
 // ─── Appointment Card ─────────────────────────────────────────────────────────
-function AppointmentCard({ appt, onCancel, onReview, onRebook, onReschedule, onJoinCall }) {
+function AppointmentCard({ appt, livePhoto, onCancel, onReview, onRebook, onReschedule, onJoinCall }) {
   const [expanded, setExpanded] = useState(appt.status === 'missed');
   const s     = STATUS[appt.status] || STATUS.pending;
   const color = avatarColor(appt.doctorName);
@@ -262,8 +261,8 @@ function AppointmentCard({ appt, onCancel, onReview, onRebook, onReschedule, onJ
       {/* ── Main Row ── */}
       <div className="flex items-center gap-5 p-5">
         <div className={`w-14 h-14 ${color} rounded-full flex items-center justify-center text-white font-bold text-lg shrink-0 overflow-hidden`}>
-          {appt.doctorPhoto
-            ? <img src={appt.doctorPhoto} alt="" className="w-full h-full object-cover" />
+          {(livePhoto || appt.doctorPhoto)
+            ? <img src={livePhoto || appt.doctorPhoto} alt="" className="w-full h-full object-cover" />
             : ini
           }
         </div>
@@ -436,6 +435,7 @@ export function MyAppointments({ onBookNew }) {
   const [savingReview,   setSavingReview]   = useState(false);
   const [savingCancel,   setSavingCancel]   = useState(false);
   const [toast,          setToast]          = useState(null);
+  const [doctorPhotos,   setDoctorPhotos]   = useState({}); // { doctorId: photoUrl }
 
   const showToast = (msg, type = 'success') => {
     setToast({ msg, type });
@@ -450,7 +450,19 @@ export function MyAppointments({ onBookNew }) {
       // Auto-mark any past pending/confirmed as missed first
       await api.post('/appointments/mark-missed', { patientId }).catch(() => {});
       const res = await api.get(`/appointments/patient/${patientId}`);
-      setAppointments(res.data || []);
+      const appts = res.data || [];
+      setAppointments(appts);
+
+      // Fetch live doctor photos (in parallel) to override stale snapshot photos
+      const uniqueDoctorIds = [...new Set(appts.map(a => a.doctorId).filter(Boolean))];
+      const photoResults = await Promise.allSettled(
+        uniqueDoctorIds.map(id =>
+          api.get(`/doctor/profile/${id}`).then(r => ({ id, photo: r.data?.personal?.photo || null }))
+        )
+      );
+      const photoMap = {};
+      photoResults.forEach(r => { if (r.status === 'fulfilled') photoMap[r.value.id] = r.value.photo; });
+      setDoctorPhotos(photoMap);
     } catch {
       showToast('Failed to load appointments', 'error');
     } finally {
@@ -676,6 +688,7 @@ export function MyAppointments({ onBookNew }) {
               <AppointmentCard
                 key={appt._id}
                 appt={appt}
+                livePhoto={doctorPhotos[appt.doctorId]}
                 onCancel={a => setCancelAppt(a)}
                 onReview={a => setReviewAppt(a)}
                 onRebook={a => setRebookAppt(a)}
@@ -703,7 +716,7 @@ export function MyAppointments({ onBookNew }) {
 
     {/* ── Modals ── */}
     {reviewAppt && (
-      <ReviewModal appt={reviewAppt} onClose={() => setReviewAppt(null)}
+      <ReviewModal appt={{...reviewAppt, doctorPhoto: doctorPhotos[reviewAppt.doctorId] || reviewAppt.doctorPhoto}} onClose={() => setReviewAppt(null)}
         onSubmit={handleReview} saving={savingReview} />
     )}
     {cancelAppt && (
