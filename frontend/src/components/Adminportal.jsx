@@ -14,6 +14,13 @@ const BASE = 'https://nhbackend.onrender.com/api/admin';
 
 const api = axios.create({ baseURL: BASE });
 
+// Attach stored token to every request
+api.interceptors.request.use(cfg => {
+  const token = sessionStorage.getItem('adminToken');
+  if (token) cfg.headers.Authorization = `Bearer ${token}`;
+  return cfg;
+});
+
 // ─── Constants ────────────────────────────────────────────────────────────────
 const DAYS = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
 const DR_STATUS = {
@@ -237,20 +244,23 @@ function AdminLogin({ onLogin }) {
   const [showPw,   setShowPw]   = useState(false);
   const [error,    setError]    = useState('');
   const [shake,    setShake]    = useState(false);
+  const [loading,  setLoading]  = useState(false);
 
-  // ← Change this to whatever password you want
-  const ADMIN_PASSWORD = 'admin@123';
-
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    if (password === ADMIN_PASSWORD) {
-      sessionStorage.setItem('adminAuth', '1');
+    setLoading(true);
+    try {
+      const res = await axios.post(`${BASE}/login`, { password });
+      sessionStorage.setItem('adminAuth',  '1');
+      sessionStorage.setItem('adminToken', res.data.token);
       onLogin();
-    } else {
-      setError('Incorrect password');
+    } catch (err) {
+      setError(err.response?.data?.error || 'Incorrect password');
       setShake(true);
       setTimeout(() => setShake(false), 500);
       setPassword('');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -292,9 +302,10 @@ function AdminLogin({ onLogin }) {
             )}
           </div>
 
-          <button type="submit"
-            className="w-full py-3 bg-blue-700 hover:bg-blue-800 active:scale-[0.98] text-white font-bold rounded-xl text-sm transition-all flex items-center justify-center gap-2">
-            <Shield className="w-4 h-4"/> Enter
+          <button type="submit" disabled={loading}
+            className="w-full py-3 bg-blue-700 hover:bg-blue-800 active:scale-[0.98] text-white font-bold rounded-xl text-sm transition-all flex items-center justify-center gap-2 disabled:opacity-60">
+            {loading ? <Loader2 className="w-4 h-4 animate-spin"/> : <Shield className="w-4 h-4"/>}
+            {loading ? 'Verifying...' : 'Enter'}
           </button>
         </form>
       </div>
@@ -342,7 +353,7 @@ function AdminDashboard({ onLogout }) {
     catch { showToast('Failed to save schedule','error'); }
   };
 
-  const handleLogout = () => { sessionStorage.removeItem('adminAuth'); onLogout(); };
+  const handleLogout = () => { sessionStorage.removeItem('adminAuth'); sessionStorage.removeItem('adminToken'); onLogout(); };
 
   const q = search.toLowerCase();
   const filteredDoctors  = doctors.filter(d=>d.name?.toLowerCase().includes(q)||d.specialization?.toLowerCase().includes(q)||d.email?.toLowerCase().includes(q));
@@ -581,12 +592,35 @@ function AdminDashboard({ onLogout }) {
 // ROOT EXPORT — handles auth state
 // ─────────────────────────────────────────────────────────────────────────────
 export function AdminPortal() {
-  const [authed, setAuthed] = useState(() => sessionStorage.getItem('adminAuth') === '1');
+  const [authed, setAuthed] = useState(false);
+  const [checking, setChecking] = useState(true);
+
+  useEffect(() => {
+    const token = sessionStorage.getItem('adminToken');
+    if (!token) { setChecking(false); return; }
+    // Verify stored token is still valid
+    axios.post(`${BASE}/verify`, {}, { headers: { Authorization: `Bearer ${token}` } })
+      .then(r => { if (r.data.valid) setAuthed(true); })
+      .catch(() => { sessionStorage.removeItem('adminToken'); sessionStorage.removeItem('adminAuth'); })
+      .finally(() => setChecking(false));
+  }, []);
+
+  if (checking) return (
+    <div className="min-h-screen flex items-center justify-center bg-gray-50">
+      <Loader2 className="w-8 h-8 text-blue-600 animate-spin"/>
+    </div>
+  );
+
+  const handleLogout = () => {
+    sessionStorage.removeItem('adminAuth');
+    sessionStorage.removeItem('adminToken');
+    setAuthed(false);
+  };
 
   return (
     <>
       {!authed && <AdminLogin onLogin={() => setAuthed(true)} />}
-      {authed  && <AdminDashboard onLogout={() => { sessionStorage.removeItem('adminAuth'); setAuthed(false); }} />}
+      {authed  && <AdminDashboard onLogout={handleLogout} />}
     </>
   );
 }
