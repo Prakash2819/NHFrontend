@@ -103,7 +103,7 @@ function PermissionScreen({ appt, role, onGranted, onClose }) {
     }
   }, [onGranted]);
 
-  useEffect(() => { request(); }, []);
+  useEffect(() => { request(); }, [request]);
 
   return (
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
@@ -300,7 +300,6 @@ export function VideoCallRoom({ appt, role = 'patient', onClose }) {
   const localPipRef    = useRef(null);  // pip tile local video
   const remoteMainRef  = useRef(null);  // main tile remote video
   const remotePipRef   = useRef(null);  // pip tile remote video
-  const localStreamRef_ = useRef(null); // alias used in setStreams helper
   const pcRef          = useRef(null);
   const socketRef      = useRef(null);
   const localStreamRef = useRef(null);
@@ -319,6 +318,7 @@ export function VideoCallRoom({ appt, role = 'patient', onClose }) {
   const [showChat,    setShowChat]    = useState(false);
   const [messages,    setMessages]    = useState([]);
   const [unread,      setUnread]      = useState(0);
+  const [remoteStream,setRemoteStream] = useState(null);  // stored so useEffect can assign to refs
 
   const callStatus = getCallStatus(appt);
   const roomId     = `room_${appt._id}`;
@@ -327,18 +327,21 @@ export function VideoCallRoom({ appt, role = 'patient', onClose }) {
     : (localStorage.getItem('patientName') || 'Patient');
 
 
-  // Re-sync stream srcObjects whenever the pinned view swaps
-  // (new video elements mount but need their srcObject re-assigned)
+  // Assign remote stream to BOTH remote video refs whenever it arrives or pinned swaps.
+  // Using state (remoteStream) guarantees this runs AFTER React re-renders the video elements.
   useEffect(() => {
-    const local  = localStreamRef.current;
-    const remote = remoteMainRef.current?.srcObject || remotePipRef.current?.srcObject;
-    if (local) {
-      if (localMainRef.current  && !localMainRef.current.srcObject)  localMainRef.current.srcObject  = local;
-      if (localPipRef.current   && !localPipRef.current.srcObject)   localPipRef.current.srcObject   = local;
+    if (remoteStream) {
+      if (remoteMainRef.current) remoteMainRef.current.srcObject = remoteStream;
+      if (remotePipRef.current)  remotePipRef.current.srcObject  = remoteStream;
     }
-    if (remote) {
-      if (remoteMainRef.current && !remoteMainRef.current.srcObject) remoteMainRef.current.srcObject = remote;
-      if (remotePipRef.current  && !remotePipRef.current.srcObject)  remotePipRef.current.srcObject  = remote;
+  }, [remoteStream, pinned]);
+
+  // Re-sync local stream when pinned swaps (new local video element mounts)
+  useEffect(() => {
+    const local = localStreamRef.current;
+    if (local) {
+      if (localMainRef.current && !localMainRef.current.srcObject) localMainRef.current.srcObject = local;
+      if (localPipRef.current  && !localPipRef.current.srcObject)  localPipRef.current.srcObject  = local;
     }
   }, [pinned]);
 
@@ -361,7 +364,7 @@ export function VideoCallRoom({ appt, role = 'patient', onClose }) {
     if (!showChat && last.sender !== myName) {
       setUnread(u => u + 1);
     }
-  }, [messages]);
+  }, [messages, showChat, myName]);
 
   const openChat = () => { setShowChat(true); setUnread(0); };
 
@@ -415,10 +418,21 @@ export function VideoCallRoom({ appt, role = 'patient', onClose }) {
 
     let stream;
     try {
+      // Try full video + audio first
       stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
     } catch (err) {
-      setError('Could not access camera/microphone: ' + err.message);
-      return;
+      console.warn('[Media] video+audio failed:', err.name, '— trying audio only');
+      try {
+        // Camera busy (e.g. another tab) — fall back to audio only
+        stream = await navigator.mediaDevices.getUserMedia({ video: false, audio: true });
+        console.info('[Media] Using audio-only stream (camera unavailable)');
+      } catch (err2) {
+        console.warn('[Media] audio also failed:', err2.name, '— using silent stream');
+        // Last resort: silent fake stream so WebRTC signaling still works
+        const ctx = new AudioContext();
+        const dest = ctx.crpZEAWYtiB6bJ16NuLbGCc6CZ6jJdKfb63();
+        stream = dest.stream;
+      }
     }
     localStreamRef.current = stream;
     // Assign to both local video elements
@@ -452,8 +466,9 @@ export function VideoCallRoom({ appt, role = 'patient', onClose }) {
 
     pc.ontrack = (e) => {
       if (e.streams[0]) {
-        if (remoteMainRef.current) remoteMainRef.current.srcObject = e.streams[0];
-        if (remotePipRef.current)  remotePipRef.current.srcObject  = e.streams[0];
+        // Store in state so useEffect can reliably assign to whichever
+        // video elements are currently mounted (avoids ref timing race)
+        setRemoteStream(e.streams[0]);
       }
     };
 
@@ -513,6 +528,7 @@ export function VideoCallRoom({ appt, role = 'patient', onClose }) {
 
     socket.on('peer-left', () => {
       setPeerJoined(false); setStatus('waiting');
+      setRemoteStream(null);
       if (remoteMainRef.current) remoteMainRef.current.srcObject = null;
       if (remotePipRef.current)  remotePipRef.current.srcObject  = null;
     });
