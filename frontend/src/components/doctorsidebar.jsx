@@ -8,6 +8,7 @@ import {
   HelpCircle,
   LogOut,
 } from 'lucide-react';
+import logo from '../assets/logo.png'
 
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 
@@ -34,9 +35,9 @@ export function DoctorSidebar( {onLogout}) {
     <div className="w-[230px] bg-white border-r border-gray-200 h-screen sticky top-0 flex flex-col shadow-sm">
 
       {/* Brand */}
-      <div className="p-6 border-b">
+      <div className="p-4 border-b">
         <h1 className="text-blue-700 text-2xl font-bold">
-          Doctor Panel
+          <img src={logo} alt="Namma Hospitals Logo" className="w-[80%] h-[48px]" />
         </h1>
       </div>
 

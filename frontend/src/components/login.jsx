@@ -356,7 +356,7 @@ export function LoginPage({ onLogin, onSignup }) {
                 <div className="w-full max-w-md">
 
                     <div className="mb-5">
-                        <img src={logo} alt="Namma Hospitals Logo" className="w-1/2 h-1/4 mb-4" />
+                        <img src={logo} alt="Namma Hospitals Logo" className="w-[50%] mb-4 mr-5" />
                         <h2 className="text-3xl font-bold mb-2">Sign In</h2>
                         <p className="text-gray-600">Welcome back! Please enter your details.</p>
                     </div>
