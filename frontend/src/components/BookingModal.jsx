@@ -2,8 +2,7 @@ import { useState, useEffect } from 'react';
 import axios from 'axios';
 import { X, CheckCircle, Video, Building2, Clock, AlertCircle } from 'lucide-react';
 
-const BASE_URL = 'https://nhbackend.onrender.com';
-const api = axios.create({ baseURL: `${BASE_URL}/api` });
+const api = axios.create({ baseURL: 'https://nhbackend.onrender.com/api' });
 const getPatientId = () => localStorage.getItem('patientId');
 
 const AVATAR_COLORS = [
@@ -78,6 +77,7 @@ export function BookingModal({ doctor, defaultType = 'in-person', onClose, onBoo
   const [schedule,        setSchedule]        = useState(null); // full schedule object from DB
   const [slotDuration,    setSlotDuration]    = useState(30);
   const [leaves,          setLeaves]          = useState([]);
+  const [bookedSlots,     setBookedSlots]     = useState([]); // times already taken
 
   // Load doctor schedule once on mount
   useEffect(() => {
@@ -165,6 +165,15 @@ export function BookingModal({ doctor, defaultType = 'in-person', onClose, onBoo
       setScheduleError('');
     }
     setTime(''); // reset selected time when date changes
+
+    // Fetch already-booked slots for this doctor+date
+    if (slots.length > 0 && doctor?._id) {
+      api.get(`/appointments/available-slots?doctorId=${doctor._id}&date=${date}`)
+        .then(res => setBookedSlots(res.data.bookedSlots || []))
+        .catch(() => setBookedSlots([]));
+    } else {
+      setBookedSlots([]);
+    }
   }, [date, schedule, slotDuration, leaves]);
 
   const handleBook = async () => {
@@ -300,19 +309,34 @@ export function BookingModal({ doctor, defaultType = 'in-person', onClose, onBoo
               {/* Slot grid */}
               {!scheduleLoading && availableSlots.length > 0 && (
                 <div className="grid grid-cols-3 gap-1.5">
-                  {availableSlots.map(t => (
-                    <button
-                      key={t}
-                      onClick={() => setTime(t)}
-                      className={`py-2 rounded-xl text-xs font-bold border transition-colors ${
-                        time === t
-                          ? 'bg-blue-700 text-white border-blue-700'
-                          : 'bg-white text-gray-600 border-gray-200 hover:border-blue-300 hover:bg-blue-50'
-                      }`}
-                    >
-                      {t}
-                    </button>
-                  ))}
+                  {availableSlots.map(t => {
+                    const isBooked = bookedSlots.includes(t);
+                    return (
+                      <button
+                        key={t}
+                        onClick={() => !isBooked && setTime(t)}
+                        disabled={isBooked}
+                        title={isBooked ? 'Already booked' : ''}
+                        className={`py-2 rounded-xl text-xs font-bold border transition-colors relative ${
+                          isBooked
+                            ? 'bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed line-through opacity-60'
+                            : time === t
+                              ? 'bg-blue-700 text-white border-blue-700'
+                              : 'bg-white text-gray-600 border-gray-200 hover:border-blue-300 hover:bg-blue-50'
+                        }`}
+                      >
+                        {t}
+                        {isBooked && <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-red-400 rounded-full border border-white"/>}
+                      </button>
+                    );
+                  })}
+                  {bookedSlots.length > 0 && (
+                    <div className="col-span-3 flex items-center gap-3 pt-1 text-[10px] text-gray-400">
+                      <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 bg-blue-700 rounded inline-block"/>Selected</span>
+                      <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 bg-gray-100 border border-gray-300 rounded inline-block"/>Booked</span>
+                      <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 bg-white border border-gray-200 rounded inline-block"/>Available</span>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
