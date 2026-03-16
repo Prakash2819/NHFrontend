@@ -1,13 +1,13 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import axios from 'axios';
 import {
-  Bell, Search, Calendar, Clock, CheckCircle, X,
+  Bell, Search, Calendar, Clock, CheckCircle, X, Timer,
   Video, Building2, Filter, RefreshCw, User, Phone,
   FileText, ChevronDown, AlertTriangle, RotateCcw,
   Star, Download, NotepadText, History, Repeat2,
   MessageSquare, ChevronRight, Eye
 } from 'lucide-react';
-import { VideoCallRoom, getCallStatus } from './Videocallroom';
+import { VideoCallRoom, getCallStatus } from './VideoCallRoom';
 
 const BASE_URL = 'https://nhbackend.onrender.com';
 const api = axios.create({ baseURL: `${BASE_URL}/api` });
@@ -220,7 +220,7 @@ function NotesDrawer({ appt, onSave, saving }) {
 }
 
 // Appointment Card
-function AppointmentCard({ appt, onUpdate, updating, onComplete, onViewHistory, onSaveNotes, savingNotes, onStartCall }) {
+function AppointmentCard({ appt, onUpdate, updating, onComplete, onCompleteEarly, onViewHistory, onSaveNotes, savingNotes, onStartCall }) {
   const [expanded,  setExpanded]  = useState(false);
   const [showNotes, setShowNotes] = useState(false);
   const color    = avatarColor(appt.patientName);
@@ -308,6 +308,12 @@ function AppointmentCard({ appt, onUpdate, updating, onComplete, onViewHistory, 
                 </button>
               );
             })()}
+          {appt.status === 'confirmed' && (
+            <button onClick={() => onCompleteEarly(appt._id)} disabled={updating === appt._id}
+              className="flex items-center gap-1 px-3 py-1.5 bg-emerald-50 text-emerald-700 text-xs font-bold rounded-lg hover:bg-emerald-100 transition-colors">
+              <CheckCircle className="w-3 h-3"/> Done Early
+            </button>
+          )}
           {appt.status === 'confirmed' && (
             <button onClick={() => onComplete(appt)} disabled={updating === appt._id}
               className="flex items-center gap-1 px-3 py-1.5 bg-blue-600 text-white text-xs font-bold rounded-xl hover:bg-blue-700 transition-colors disabled:opacity-60">
@@ -403,6 +409,13 @@ export function DoctorAppointments() {
   const [doctorPhoto,    setDoctorPhoto]    = useState(null);
 
   const doctorName = localStorage.getItem('doctorName') || 'Doctor';
+
+  // ── Delay state ──────────────────────────────────────────────────────────
+  const [showDelayModal,  setShowDelayModal]  = useState(false);
+  const [delayMinutes,    setDelayMinutes]    = useState(15);
+  const [delayReason,     setDelayReason]     = useState('Previous patient took longer');
+  const [sendingDelay,    setSendingDelay]    = useState(false);
+  const [overdueAppts,    setOverdueAppts]    = useState([]); // auto-detected overdue
   const doctorPhotoSrc = doctorPhoto ? photoSrc(doctorPhoto) : null;
 
   const showToast = (msg, type = 'success') => {
@@ -437,6 +450,53 @@ export function DoctorAppointments() {
 
   useEffect(() => { loadAppointments(); }, [statusFilter, dateFilter]);
 
+  // ── Auto-detect overdue appointments every 2 minutes ─────────────────────
+  useEffect(() => {
+    const check = async () => {
+      try {
+        const res = await api.get(`/appointments/doctor/${getDoctorId()}/check-overdue`);
+        setOverdueAppts(res.data.overdue || []);
+      } catch {}
+    };
+    check();
+    const t = setInterval(check, 2 * 60 * 1000);
+    return () => clearInterval(t);
+  }, []);
+
+  // ── Send delay notification to all upcoming patients ──────────────────────
+  const handleDelay = async () => {
+    setSendingDelay(true);
+    try {
+      const res = await api.post(`/appointments/doctor/${getDoctorId()}/delay`, {
+        delayMinutes,
+        reason: delayReason,
+      });
+      setShowDelayModal(false);
+      setOverdueAppts([]);
+      showToast(`⏰ ${res.data.notified} patient(s) notified of ${delayMinutes} min delay`);
+      loadAppointments();
+    } catch (err) {
+      showToast(err.response?.data?.error || 'Failed to send delay notification', 'error');
+    } finally {
+      setSendingDelay(false);
+    }
+  };
+
+  // ── Complete early — marks done + SMS next patient ────────────────────────
+  const handleCompleteEarly = async (id) => {
+    setUpdating(id);
+    try {
+      const res = await api.post(`/appointments/${id}/complete-early`);
+      setAppointments(prev => prev.map(a => a._id === id ? { ...a, status: 'completed' } : a));
+      const next = res.data.nextPatient;
+      showToast(next
+        ? `✅ Completed early — ${next.patientName} notified to come in`
+        : '✅ Completed early'
+      );
+    } catch { showToast('Failed', 'error'); }
+    finally { setUpdating(null); }
+  };
+
   const handleUpdate = async (id, status) => {
     setUpdating(id);
     try {
@@ -457,6 +517,14 @@ export function DoctorAppointments() {
     } catch { showToast('Failed to complete', 'error'); }
     finally { setSavingComplete(false); }
   };
+
+  const DELAY_REASONS = [
+    'Previous patient took longer',
+    'Emergency case',
+    'Medical procedure running late',
+    'Technical issues',
+    'Personal reason',
+  ];
 
   const handleSaveNotes = async (id, notes) => {
     setSavingNotes(id);
@@ -623,6 +691,65 @@ export function DoctorAppointments() {
     {completeAppt && <CompleteModal appt={completeAppt} onClose={() => setCompleteAppt(null)} onConfirm={handleComplete} saving={savingComplete} />}
     {historyAppt  && <PatientHistoryModal appt={historyAppt} doctorId={getDoctorId()} onClose={() => setHistoryAppt(null)} />}
     {activeCall   && <VideoCallRoom appt={activeCall} role="doctor" onClose={() => setActiveCall(null)} />}
+    {/* ── Delay Modal ── */}
+    {showDelayModal && (
+      <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setShowDelayModal(false)}>
+        <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl p-6" onClick={e => e.stopPropagation()}>
+          <div className="flex items-center justify-between mb-5">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-orange-100 rounded-xl flex items-center justify-center">
+                <Timer className="w-5 h-5 text-orange-600"/>
+              </div>
+              <div>
+                <h3 className="font-bold text-gray-900">Notify Patients of Delay</h3>
+                <p className="text-xs text-gray-500">SMS will be sent to all upcoming patients today</p>
+              </div>
+            </div>
+            <button onClick={() => setShowDelayModal(false)}><X className="w-5 h-5 text-gray-400"/></button>
+          </div>
+
+          <div className="mb-4">
+            <label className="block text-xs font-bold text-gray-600 uppercase tracking-wide mb-2">Delay Duration</label>
+            <div className="grid grid-cols-4 gap-2">
+              {[10, 15, 20, 30, 45, 60, 90, 120].map(m => (
+                <button key={m} onClick={() => setDelayMinutes(m)}
+                  className={`py-2.5 rounded-xl text-sm font-bold border transition-colors ${delayMinutes === m ? 'bg-orange-500 text-white border-orange-500' : 'bg-white text-gray-700 border-gray-200 hover:border-orange-300'}`}>
+                  {m >= 60 ? `${m/60}hr` : `${m}m`}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="mb-5">
+            <label className="block text-xs font-bold text-gray-600 uppercase tracking-wide mb-2">Reason</label>
+            <div className="space-y-2">
+              {DELAY_REASONS.map(r => (
+                <button key={r} onClick={() => setDelayReason(r)}
+                  className={`w-full text-left px-3 py-2.5 rounded-xl text-sm border transition-colors ${delayReason === r ? 'bg-orange-50 border-orange-300 text-orange-800 font-semibold' : 'border-gray-200 text-gray-600 hover:border-gray-300'}`}>
+                  {r}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="bg-orange-50 rounded-xl p-3 mb-5 border border-orange-100">
+            <p className="text-xs text-orange-700 font-medium">
+              📱 SMS preview: "Dr. {doctorName} is running late by {delayMinutes >= 60 ? `${Math.floor(delayMinutes/60)}hr${delayMinutes%60>0?' '+delayMinutes%60+'min':''}` : `${delayMinutes} minutes`}. New estimated time will be included."
+            </p>
+          </div>
+
+          <div className="flex gap-3">
+            <button onClick={() => setShowDelayModal(false)} className="flex-1 py-2.5 border border-gray-200 rounded-xl text-sm font-semibold text-gray-600 hover:bg-gray-50">Cancel</button>
+            <button onClick={handleDelay} disabled={sendingDelay}
+              className="flex-1 py-2.5 bg-orange-500 text-white rounded-xl text-sm font-bold hover:bg-orange-600 disabled:opacity-60 flex items-center justify-center gap-2">
+              {sendingDelay ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"/> : <Timer className="w-4 h-4"/>}
+              {sendingDelay ? 'Sending SMS...' : 'Send Delay Notification'}
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
+
     {toast && <Toast message={toast.msg} type={toast.type} onClose={() => setToast(null)} />}
     </>
   );

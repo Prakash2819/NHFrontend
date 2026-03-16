@@ -7,7 +7,7 @@ import {
   AlertTriangle, CalendarCheck, Repeat2
 } from 'lucide-react';
 import { BookingModal } from './BookingModal';
-import { VideoCallRoom, getCallStatus } from './Videocallroom';
+import { VideoCallRoom, getCallStatus } from './VideoCallRoom';
 
 // ─── Axios ────────────────────────────────────────────────────────────────────
 const api = axios.create({ baseURL: 'https://nhbackend.onrender.com/api' });
@@ -273,10 +273,18 @@ function AppointmentCard({ appt, livePhoto, onCancel, onReview, onRebook, onResc
               <h4 className="font-bold text-gray-900 text-sm">{appt.doctorName}</h4>
               <p className="text-xs text-gray-500 font-medium mt-0.5">{appt.doctorSpecialty}</p>
             </div>
-            <span className={`shrink-0 flex items-center gap-1.5 text-xs font-bold px-2.5 py-1 rounded-full ${s.bg} ${s.text}`}>
-              <span className={`w-1.5 h-1.5 rounded-full ${s.dot}`} />
-              {s.label}
-            </span>
+            <div className="flex items-center gap-1.5 shrink-0">
+              {appt.isRunningLate && appt.delayMinutes > 0 && (
+                <span className="flex items-center gap-1 text-xs font-bold px-2 py-1 rounded-full bg-orange-100 text-orange-700">
+                  <Clock className="w-3 h-3"/>
+                  +{appt.delayMinutes}m late
+                </span>
+              )}
+              <span className={`flex items-center gap-1.5 text-xs font-bold px-2.5 py-1 rounded-full ${s.bg} ${s.text}`}>
+                <span className={`w-1.5 h-1.5 rounded-full ${s.dot}`} />
+                {s.label}
+              </span>
+            </div>
           </div>
 
           <div className="flex items-center gap-4 mt-2.5 flex-wrap">
@@ -306,6 +314,26 @@ function AppointmentCard({ appt, livePhoto, onCancel, onReview, onRebook, onResc
       {/* ── Expanded Details ── */}
       {expanded && (
         <div className="border-t border-gray-100">
+
+          {/* ── Delay banner ── */}
+          {appt.isRunningLate && appt.delayMinutes > 0 && (
+            <div className="mx-5 mt-4 bg-orange-50 border border-orange-200 rounded-xl p-3 flex items-center gap-3">
+              <div className="w-8 h-8 bg-orange-100 rounded-lg flex items-center justify-center shrink-0">
+                <Clock className="w-4 h-4 text-orange-600"/>
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-bold text-orange-700">
+                  ⏰ Running {appt.delayMinutes >= 60
+                    ? `${Math.floor(appt.delayMinutes/60)}hr${appt.delayMinutes%60>0?' '+appt.delayMinutes%60+'min':''}`
+                    : `${appt.delayMinutes} min`} late
+                </p>
+                <p className="text-xs text-orange-600 mt-0.5">
+                  {appt.delayReason && <span>{appt.delayReason} · </span>}
+                  New estimated time: <strong>{appt.estimatedTime || appt.time}</strong>
+                </p>
+              </div>
+            </div>
+          )}
 
           {/* Missed banner — rendered before notes */}
           {isMissed && (
