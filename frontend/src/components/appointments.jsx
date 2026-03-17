@@ -291,8 +291,17 @@ function AppointmentCard({ appt, livePhoto, onCancel, onReview, onRebook, onResc
             <span className="flex items-center gap-1.5 text-xs text-gray-500 font-medium">
               <Calendar className="w-3.5 h-3.5 text-blue-500" /> {formatDate(appt.date)}
             </span>
-            <span className="flex items-center gap-1.5 text-xs text-gray-500 font-medium">
-              <Clock className="w-3.5 h-3.5 text-blue-500" /> {appt.time}
+            <span className="flex items-center gap-1.5 text-xs font-medium">
+              <Clock className="w-3.5 h-3.5 text-blue-500" />
+              {appt.isRunningLate && appt.delayMinutes > 0 ? (
+                <span className="flex items-center gap-1">
+                  <span className="line-through text-gray-400">{appt.time}</span>
+                  <span className="text-orange-600 font-bold">{addMinsToTime(appt.time, appt.delayMinutes)}</span>
+                  <span className="text-orange-500 text-[10px] font-bold bg-orange-100 px-1 rounded">+{appt.delayMinutes}m</span>
+                </span>
+              ) : (
+                <span className="text-gray-500">{appt.time}</span>
+              )}
             </span>
             <span className="flex items-center gap-1.5 text-xs text-gray-500 font-medium">
               {appt.type === 'video'
@@ -329,7 +338,7 @@ function AppointmentCard({ appt, livePhoto, onCancel, onReview, onRebook, onResc
                 </p>
                 <p className="text-xs text-orange-600 mt-0.5">
                   {appt.delayReason && <span>{appt.delayReason} · </span>}
-                  New estimated time: <strong>{appt.estimatedTime || appt.time}</strong>
+                  New estimated time: <strong>{addMinsToTime(appt.time, appt.delayMinutes) || appt.time}</strong>
                 </p>
               </div>
             </div>

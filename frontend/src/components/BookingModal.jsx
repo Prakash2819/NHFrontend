@@ -166,10 +166,14 @@ export function BookingModal({ doctor, defaultType = 'in-person', onClose, onBoo
     }
     setTime(''); // reset selected time when date changes
 
-    // Fetch already-booked slots for this doctor+date
+    // Fetch already-booked slots (including delay-adjusted blocked slots)
     if (slots.length > 0 && doctor?._id) {
       api.get(`/appointments/available-slots?doctorId=${doctor._id}&date=${date}`)
-        .then(res => setBookedSlots(res.data.bookedSlots || []))
+        .then(res => {
+          const booked = res.data.bookedSlots || [];
+          const delayed = res.data.delayedSlots || []; // extra blocked slots from delays
+          setBookedSlots([...new Set([...booked, ...delayed])]);
+        })
         .catch(() => setBookedSlots([]));
     } else {
       setBookedSlots([]);

@@ -10,6 +10,21 @@ import {
 import { VideoCallRoom, getCallStatus } from './VideoCallRoom';
 
 const BASE_URL = 'https://nhbackend.onrender.com';
+
+// ── Frontend time helper ──────────────────────────────────────────────────────
+function addMinsToTime(timeStr, mins) {
+  if (!timeStr || !mins) return timeStr;
+  const m = timeStr.trim().match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
+  if (!m) return timeStr;
+  let [, h, min, mer] = m; h = +h; min = +min;
+  if (mer.toUpperCase() === 'PM' && h !== 12) h += 12;
+  if (mer.toUpperCase() === 'AM' && h === 12) h = 0;
+  let total = h * 60 + min + mins;
+  let nh = Math.floor(total / 60) % 24, nm = total % 60;
+  const nmer = nh >= 12 ? 'PM' : 'AM';
+  if (nh > 12) nh -= 12; if (nh === 0) nh = 12;
+  return `${String(nh).padStart(2,'0')}:${String(nm).padStart(2,'0')} ${nmer}`;
+}
 const api = axios.create({ baseURL: `${BASE_URL}/api` });
 const getDoctorId = () => localStorage.getItem('doctorId');
 
@@ -278,6 +293,12 @@ function AppointmentCard({ appt, onUpdate, updating, onComplete, onCompleteEarly
                 <Repeat2 className="w-3 h-3" /> Rescheduled
               </span>
             )}
+            {appt.isRunningLate && appt.delayMinutes > 0 && (
+              <span className="flex items-center gap-1.5 text-xs font-bold bg-orange-100 text-orange-700 px-2.5 py-1.5 rounded-lg border border-orange-200">
+                <Timer className="w-3 h-3" />
+                +{appt.delayMinutes}m · Est. {addMinsToTime(appt.time, appt.delayMinutes)}
+              </span>
+            )}
             {appt.reason && <span className="text-xs text-gray-400 italic">"{appt.reason}"</span>}
             {appt.notes && !expanded && (
               <span className="flex items-center gap-1 text-xs text-gray-400"><NotepadText className="w-3 h-3" /> Has notes</span>
@@ -450,47 +471,40 @@ export function DoctorAppointments() {
 
   useEffect(() => { loadAppointments(); }, [statusFilter, dateFilter]);
 
-  // ── Auto-detect + auto-notify overdue appointments every 5 minutes ──────────
-  // If doctor forgets to click "Running Late", system auto-detects and SMS patients
-  const autoDelayFiredRef = useRef({}); // track {apptId: timestamp} to avoid re-firing
+  // ── Auto-detect + auto-notify overdue appointments ───────────────────────────
+  // Polls every 3 min. If overdue detected and not notified in last 25 min → auto SMS
+  const autoDelayFiredRef = useRef(0); // timestamp of last auto-fire
 
   useEffect(() => {
     const check = async () => {
       try {
-        // 1. Check for overdue appointments
         const res = await api.get(`/appointments/doctor/${getDoctorId()}/check-overdue`);
         const overdue = res.data.overdue || [];
         setOverdueAppts(overdue);
 
-        // 2. If overdue found → auto-trigger delay notification
         if (overdue.length > 0) {
           const now = Date.now();
-          const lastFired = autoDelayFiredRef.current['last'] || 0;
-          const thirtyMins = 30 * 60 * 1000;
-
-          // Only auto-fire once every 30 minutes to avoid SMS spam
-          if (now - lastFired > thirtyMins) {
-            autoDelayFiredRef.current['last'] = now;
-            try {
-              const delayRes = await api.post(`/appointments/doctor/${getDoctorId()}/auto-delay`);
-              if (delayRes.data.notified > 0) {
-                showToast(
-                  `⏰ Auto-detected delay — ${delayRes.data.notified} patient(s) notified (${delayRes.data.delayMins} min late)`,
-                  'success'
-                );
-                loadAppointments(); // refresh to show updated delay flags
-              }
-            } catch (err) {
-              console.warn('[AutoDelay] failed:', err.message);
+          const twentyFiveMins = 25 * 60 * 1000;
+          // Fire immediately on first detect, then throttle to once per 25 mins
+          if (now - autoDelayFiredRef.current > twentyFiveMins) {
+            autoDelayFiredRef.current = now;
+            const delayRes = await api.post(`/appointments/doctor/${getDoctorId()}/auto-delay`);
+            if (delayRes.data.notified > 0) {
+              showToast(
+                `⏰ Auto-detected: Dr running ${delayRes.data.delayMins} min late — ${delayRes.data.notified} patient(s) notified`,
+                'success'
+              );
+              loadAppointments();
             }
           }
         }
-      } catch {}
+      } catch (err) {
+        console.warn('[AutoDelay]', err.message);
+      }
     };
 
-    // Run immediately, then every 5 minutes
     check();
-    const t = setInterval(check, 5 * 60 * 1000);
+    const t = setInterval(check, 3 * 60 * 1000); // every 3 minutes
     return () => clearInterval(t);
   }, []);
 
