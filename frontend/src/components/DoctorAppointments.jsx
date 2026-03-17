@@ -450,16 +450,47 @@ export function DoctorAppointments() {
 
   useEffect(() => { loadAppointments(); }, [statusFilter, dateFilter]);
 
-  // ── Auto-detect overdue appointments every 2 minutes ─────────────────────
+  // ── Auto-detect + auto-notify overdue appointments every 5 minutes ──────────
+  // If doctor forgets to click "Running Late", system auto-detects and SMS patients
+  const autoDelayFiredRef = useRef({}); // track {apptId: timestamp} to avoid re-firing
+
   useEffect(() => {
     const check = async () => {
       try {
+        // 1. Check for overdue appointments
         const res = await api.get(`/appointments/doctor/${getDoctorId()}/check-overdue`);
-        setOverdueAppts(res.data.overdue || []);
+        const overdue = res.data.overdue || [];
+        setOverdueAppts(overdue);
+
+        // 2. If overdue found → auto-trigger delay notification
+        if (overdue.length > 0) {
+          const now = Date.now();
+          const lastFired = autoDelayFiredRef.current['last'] || 0;
+          const thirtyMins = 30 * 60 * 1000;
+
+          // Only auto-fire once every 30 minutes to avoid SMS spam
+          if (now - lastFired > thirtyMins) {
+            autoDelayFiredRef.current['last'] = now;
+            try {
+              const delayRes = await api.post(`/appointments/doctor/${getDoctorId()}/auto-delay`);
+              if (delayRes.data.notified > 0) {
+                showToast(
+                  `⏰ Auto-detected delay — ${delayRes.data.notified} patient(s) notified (${delayRes.data.delayMins} min late)`,
+                  'success'
+                );
+                loadAppointments(); // refresh to show updated delay flags
+              }
+            } catch (err) {
+              console.warn('[AutoDelay] failed:', err.message);
+            }
+          }
+        }
       } catch {}
     };
+
+    // Run immediately, then every 5 minutes
     check();
-    const t = setInterval(check, 2 * 60 * 1000);
+    const t = setInterval(check, 5 * 60 * 1000);
     return () => clearInterval(t);
   }, []);
 
